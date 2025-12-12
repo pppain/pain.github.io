@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Yakında!</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@400;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #000000, #1a0000);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            z-index: 10;
+            padding: 20px;
+        }
+
+        h1 {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 5.5rem;
+            color: #FF0000;
+            text-shadow: 0 0 30px #FF0000, 0 0 60px #FF0000;
+            letter-spacing: 4px;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            font-size: 2.8rem;
+            color: #fff;
+            margin: 15px 0;
+        }
+
+        .coming-soon {
+            font-size: 4rem;
+            color: #FF0000;
+            text-shadow: 0 0 40px #FF0000;
+            margin: 30px 0;
+            font-weight: bold;
+        }
+
+        p {
+            font-size: 1.7rem;
+            color: #ddd;
+            margin: 30px 0 50px;
+        }
+
+        .countdown {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 60px;
+        }
+
+        .box {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 25px 15px;
+            width: 140px;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.6);
+            transition: transform 0.3s;
+        }
+
+        .box:hover {
+            transform: scale(1.1);
+        }
+
+        .box span {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #FF0000;
+            display: block;
+            text-shadow: 0 0 15px #FF0000;
+        }
+
+        .box small {
+            font-size: 1.1rem;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .youtube-btn {
+            display: inline-block;
+            background: #FF0000;
+            color: white !important;
+            padding: 18px 50px;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 10px 30px rgba(255, 0, 0, 0.7);
+            transition: all 0.3s ease;
+        }
+
+        .youtube-btn:hover {
+            background: #cc0000;
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 20px 40px rgba(255, 0, 0, 0.9);
+        }
+
+        /* Kar efekti */
+        .snow {
+            position: absolute;
+            color: #fff;
+            font-size: 1.8rem;
+            pointer-events: none;
+            animation: snowFall linear infinite;
+            z-index: 5;
+        }
+
+        @keyframes snowFall {
+            to { transform: translateY(100vh); }
+        }
+
+        /* Kırmızı parıltılar */
+        .glow {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #FF0000;
+            border-radius: 50%;
+            box-shadow: 0 0 20px 8px #FF0000;
+            animation: glowAnim 4s infinite;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        @keyframes glowAnim {
+            0%, 100% { opacity: 0.3; transform: scale(0.5); }
+            50% { opacity: 1; transform: scale(1.5); }
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 4rem; }
+            .coming-soon { font-size: 3rem; }
+            .countdown { gap: 15px; }
+            .box { width: 110px; padding: 20px 10px; }
+            .box span { font-size: 3rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>YOUTUBE</h1>
+        <h2>Video İzleyip Şarkı Dinleme</h2>
+        <div class="coming-soon">YAKINDA!</div>
+        
+        <p>Yeni klipler, şarkılar ve sürprizler<br>20 Aralık 2025 saat 15:00'te burada!</p>
+
+        <div class="countdown" id="countdown">
+            <div class="box"><span id="days">00</span><small>Gün</small></div>
+            <div class="box"><span id="hours">00</span><small>Saat</small></div>
+            <div class="box"><span id="minutes">00</span><small>Dakika</small></div>
+            <div class="box"><span id="seconds">00</span><small>Saniye</small></div>
+        </div>
+
+        <a href="https://www.youtube.com/@seninkanaladi" target="_blank" class="youtube-btn">
+            KANALA ABONE OL
+        </a>
+        <!-- Linki kendi kanalınla değiştir -->
+    </div>
+
+    <script>
+        // 20 Aralık 2025 saat 15:00 (3 PM)
+        const releaseDate = new Date('December 20, 2025 15:00:00').getTime();
+
+        function updateTimer() {
+            const now = new Date().getTime();
+            const distance = releaseDate - now;
+
+            if (distance < 0) {
+                document.getElementById('countdown').innerHTML = '<h2 style="color:#FF0000; text-shadow: 0 0 30px #FF0000;">ŞİMDİ YAYINDA! BOMBAYI PATLAT</h2>';
+                return;
+            }
+
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            document.getElementById('days').textContent = days.toString().padStart(2, '0');
+            document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
+            document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
+            document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer();
+
+        // Kar efekti
+        setInterval(() => {
+            const snow = document.createElement('div');
+            snow.classList.add('snow');
+            snow.innerText = ['❄', '❅', '❆'][Math.floor(Math.random() * 3)];
+            snow.style.left = Math.random() * 100 + 'vw';
+            snow.style.animationDuration = Math.random() * 4 + 6 + 's';
+            snow.style.opacity = Math.random() * 0.6 + 0.4;
+            document.body.appendChild(snow);
+            setTimeout(() => snow.remove(), 12000);
+        }, 200);
+
+        // Kırmızı parıltılar
+        for(let i = 0; i < 50; i++) {
+            const g = document.createElement('div');
+            g.classList.add('glow');
+            g.style.left = Math.random() * 100 + 'vw';
+            g.style.top = Math.random() * 100 + 'vh';
+            g.style.animationDelay = Math.random() * 4 + 's';
+            document.body.appendChild(g);
+        }
+    </script>
+</body>
+</html>
