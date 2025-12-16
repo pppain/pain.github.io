@@ -26,6 +26,9 @@
      <div class="side-menu-content">
         <a href="menubar.html" class="menu-link"><i class="fa-solid fa-gamepad"></i> APPs</a>
         <a href="aktiflik.html" class="menu-link" id="menuActivityBtn" onclick="openLeaderboard('activity')"><i class="fa-solid fa-chart-line"></i> Aktiflik Sıralama</a>
+       <a href="gunluk.html" id="menuDailyBtn" class="menu-link"><i class="fa-solid fa-gift"></i> Günlük</a>
+<a href="#" id="menuTasksBtn" class="menu-link"><i class="fa-solid fa-list-check"></i> Günlük Görevler</a>
+<a href="oda.html" id="menuRoomsBtn" class="menu-link"><i class="fa-solid fa-door-open"></i> Odalar</a>
         <a href="sohret.html" class="menu-link" id="menuFameBtn" onclick="openLeaderboard('fame')"><i class="fa-solid fa-sack-dollar"></i> Şöhret Sıralaması</a>
         <a href="rank.html" class="menu-link" id="menuRankBtn" onclick="openLeaderboard('rank')"><i class="fa-solid fa-trophy"></i> Rank Sıralaması</a>
         <a href="bildirim.html" class="menu-link" id="notifMenuLink" onclick="openNotifications()"><i class="fa-solid fa-bell"></i> Bildirimler <span id="notifBadge" class="notif-dot hidden" aria-hidden="true"></span></a>
@@ -409,6 +412,8 @@
     window.closeSuccessOverlay = () => document.getElementById('successOverlay').style.display = 'none';
   </script>
   <script src="script.js" defer></script>
+  <script src="features.js" defer></script>
+  <script src="features.fix.js" defer></script>
   <!-- Çerçeve seçici için küçük eklenti -->
  
 </body>
