@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Günlük Ödüller & Görevler</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <style>
+    :root {
+      --bg-grad: radial-gradient(circle at top left, #1e1b4b, #0f172a);
+      --glass: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --primary: #6366f1;
+      --accent: #f59e0b; /* Gold for streak */
+      --success: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --card-radius: 20px;
+    }
+
+    * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg-grad);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-bottom: 40px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    /* Container */
+    .container {
+      width: 100%;
+      max-width: 600px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 5px;
+    }
+    .app-title { font-size: 1.4rem; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+    .app-title span { background: linear-gradient(135deg, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    /* Cards */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--card-radius);
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s;
+    }
+    
+    /* Streak Section */
+    .streak-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+    .streak-count { font-size: 3rem; font-weight: 800; color: var(--accent); line-height: 1; display: flex; align-items: center; gap: 10px; }
+    .streak-flame { font-size: 3.5rem; color: #ef4444; filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.5)); animation: burn 1.5s infinite alternate; }
+    @keyframes burn { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.1); opacity: 1; } }
+    
+    .reward-box { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05); }
+    .reward-title { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .reward-val { font-size: 1.1rem; font-weight: 600; color: #fff; }
+
+    /* Inputs & Buttons */
+    .btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-weight: 700; cursor: pointer; font-size: 1rem;
+      transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px;
+    }
+    .btn-primary { background: linear-gradient(135deg, var(--primary), #4f46e5); color: #fff; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-claim { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); }
+    .btn-claim:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
+    .btn-ghost { background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted); padding: 8px 16px; font-size: 0.9rem; width: auto;}
+
+    .input {
+      width: 100%; padding: 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border);
+      border-radius: 12px; color: #fff; font-size: 1rem; margin-bottom: 12px; transition: 0.2s;
+    }
+    .input:focus { border-color: var(--primary); background: rgba(0,0,0,0.3); }
+
+    /* Progress & Level */
+    .level-info { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 600; }
+    .xp-track { width: 100%; height: 12px; background: rgba(0,0,0,0.3); border-radius: 99px; overflow: hidden; }
+    .xp-fill { height: 100%; background: linear-gradient(90deg, #10b981, #3b82f6); border-radius: 99px; width: 0%; transition: width 0.5s ease; }
+
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+    .stat-item { background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; }
+    .stat-val { font-size: 1.2rem; font-weight: 700; color: #fff; }
+    .stat-label { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* Missions */
+    .mission-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px; margin-bottom: 8px; border-radius: 12px;
+      background: rgba(255,255,255,0.03); border: 1px solid transparent;
+    }
+    .mission-item.completed { opacity: 0.6; text-decoration: line-through; border-color: var(--success); }
+    .mission-desc { font-size: 0.95rem; }
+    .mission-badge { font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 6px; margin-left: 6px; }
+    .btn-mini { padding: 6px 12px; font-size: 0.8rem; border-radius: 8px; width: auto; }
+
+    /* Events */
+    .event-card { border: 1px solid rgba(236, 72, 153, 0.3); background: rgba(236, 72, 153, 0.05); }
+    .event-icon { color: #ec4899; }
+
+    /* Auth Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: 0.3s;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: all; }
+    .auth-box { background: #1e293b; width: 90%; max-width: 400px; padding: 30px; border-radius: 24px; border: 1px solid var(--glass-border); box-shadow: 0 20px 50px #000; }
+    
+    /* Toast */
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); background: #334155; color: #fff; padding: 12px 24px; border-radius: 30px; opacity: 0; transition: 0.3s; pointer-events: none; z-index: 200; display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    
+  </style>
+</head>
+<body>
+
+  <div id="authModal" class="modal-overlay active">
+    <div class="auth-box">
+      <h2 style="margin:0 0 10px 0; font-size:1.6rem;">Giriş Yap</h2>
+      <p style="color:var(--text-muted); margin-bottom:24px; font-size:0.9rem;">Kullanıcı adı girin. Hesabınız yoksa otomatik oluşturulur.</p>
+      
+      <form id="loginForm">
+        <input type="text" id="usernameInput" class="input" placeholder="Kullanıcı Adı" autocomplete="off" minlength="3" required>
+        <input type="password" id="passwordInput" class="input" placeholder="Şifre" minlength="6" required>
+        <button type="submit" class="btn btn-primary" id="loginBtn">Devam Et</button>
+        <div id="loginError" style="color:#ef4444; margin-top:14px; text-align:center; font-size:0.9rem;"></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="container" id="appContent" style="display:none;">
+    
+    <div class="app-header">
+      <div class="app-title">
+        <span class="material-icons-round" style="color:#f59e0b; font-size:1.8rem;">emoji_events</span>
+        <span>Retention</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span id="headerUsername" style="font-weight:600; font-size:0.9rem;"></span>
+        <button id="logoutBtn" class="btn btn-ghost" style="padding:6px;"><span class="material-icons-round">logout</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="streak-header">
+        <div>
+          <div style="color:var(--text-muted); font-size:0.9rem; font-weight:600;">GÜNLÜK SERİ</div>
+          <div class="streak-count">
+            <span id="streakDays">0</span>
+            <span class="material-icons-round streak-flame">local_fire_department</span>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div id="premiumBadge" style="display:none; background:linear-gradient(45deg,#f59e0b,#fbbf24); color:#000; font-weight:800; padding:4px 10px; border-radius:20px; font-size:0.7rem;">PREMIUM</div>
+        </div>
+      </div>
+      
+      <div class="reward-box">
+        <div class="reward-title">Bugünün Ödülü</div>
+        <div class="reward-val" id="dailyRewardDesc">Yükleniyor...</div>
+      </div>
+      
+      <button class="btn btn-claim" id="claimBtn">
+        <span class="material-icons-round">card_giftcard</span> GÜNLÜK ÖDÜLÜ AL
+      </button>
+      
+      <div style="margin-top:12px; font-size:0.75rem; color:var(--text-muted); text-align:center; line-height:1.4;">
+        Her gün giriş yap, ödülleri katla! <br>7. ve 30. günlerde SÜRPRİZ sandıklar.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="level-info">
+        <span>Seviye <span id="currentLevel" style="color:var(--primary); font-size:1.2rem;">1</span></span>
+        <span style="color:var(--text-muted); font-size:0.9rem;"><span id="currentXp">0</span> / <span id="xpForNext">100</span> XP</span>
+      </div>
+      <div class="xp-track">
+        <div id="xpBarInner" class="xp-fill"></div>
+      </div>
+      
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="material-icons-round" style="color:#f59e0b; margin-bottom:4px;">monetization_on</span>
+          <span class="stat-val" id="statCoins">0</span>
+          <span class="stat-label">Coin</span>
+        </div>
+        <div class="stat-item">
+          <span class="material-icons-round" style="color:#6366f1; margin-bottom:4px;">chat</span>
+          <span class="stat-val" id="statMessages">0</span>
+          <span class="stat-label">Mesaj</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="hourlyEventBox" class="card event-card" style="display:none;"></div>
+    <div id="randomSurpriseBox" class="card event-card" style="display:none; border-color:rgba(16, 185, 129, 0.3); background:rgba(16, 185, 129, 0.05);"></div>
+
+    <div class="card">
+      <h3 style="margin:0 0 16px 0; display:flex; align-items:center; gap:8px;">
+        <span class="material-icons-round" style="color:#10b981;">task_alt</span>
+        Görevler
+      </h3>
+      <div id="missionsList"></div>
+    </div>
+
+  </div>
+
+  <div id="toastWrapper"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // --- CONFIG ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBlirRiiNPpdqmTAmq6DsSq8mCUlgBHgVc",
+      authDomain: "lilemir-new.firebaseapp.com",
+      projectId: "lilemir-new",
+      storageBucket: "lilemir-new.firebasestorage.app",
+      messagingSenderId: "339863121380",
+      appId: "1:339863121380:web:123195552e821b085e6bf1"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // --- UTILS ---
+    const el = id => document.getElementById(id);
+    const showToast = (msg, type='success') => {
+      const w = el('toastWrapper');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.innerHTML = `<span class="material-icons-round">${type==='success'?'check_circle':'info'}</span> ${msg}`;
+      w.appendChild(t);
+      setTimeout(()=>t.classList.add('show'), 10);
+      setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(), 300); }, 3000);
+    };
+
+    // --- STATE ---
+    let currentUser = null;
+    let retentionData = null;
+    let userDocRef = null;
+
+    // --- AUTH (Auto-Register Logic) ---
+    const createFakeEmail = (username) => `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@lilemir.local`;
+
+    el('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = el('loginBtn');
+      const err = el('loginError');
+      const user = el('usernameInput').value.trim();
+      const pass = el('passwordInput').value;
+
+      btn.disabled = true; err.textContent = '';
+      
+      const email = createFakeEmail(user);
+
+      try {
+        // Try Login
+        await auth.signInWithEmailAndPassword(email, pass);
+      } catch (error) {
+        if(error.code === 'auth/user-not-found') {
+          // Register
+          try {
+            const cred = await auth.createUserWithEmailAndPassword(email, pass);
+            // Create initial Firestore doc
+            await db.collection('users').doc(cred.user.uid).set({
+              uid: cred.user.uid,
+              username: user,
+              displayName: user,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              coins: 0,
+              xp: 0,
+              streak: 0,
+              lastDailyClaim: ""
+            });
+            showToast('Hesap oluşturuldu! Hoşgeldin.');
+          } catch(regErr) {
+            err.textContent = "Kayıt hatası: " + regErr.message;
+            btn.disabled = false;
+          }
+        } else {
+          err.textContent = "Hata: " + error.message;
+          btn.disabled = false;
+        }
+      }
+    };
+
+    auth.onAuthStateChanged(async (u) => {
+      if (u) {
+        el('authModal').classList.remove('active');
+        el('appContent').style.display = 'flex';
+        currentUser = u;
+        userDocRef = db.collection('users').doc(u.uid);
+        
+        // Load Data
+        await loadUserData();
+        
+      } else {
+        el('authModal').classList.add('active');
+        el('appContent').style.display = 'none';
+        currentUser = null;
+      }
+    });
+
+    el('logoutBtn').onclick = () => auth.signOut();
+
+    // --- DATA & UI LOGIC ---
+    async function loadUserData() {
+      const snap = await userDocRef.get();
+      if(snap.exists) {
+        retentionData = snap.data();
+        el('headerUsername').textContent = retentionData.displayName || retentionData.username;
+        renderDashboard();
+      } else {
+        // Fallback if doc missing (rare edge case with auth sync)
+        retentionData = { xp:0, coins:0, streak:0 };
+        renderDashboard();
+      }
+    }
+
+    function renderDashboard() {
+      // 1. Streak & Daily
+      const streak = Number(retentionData.streak || 0);
+      const todayKey = new Date().toISOString().slice(0,10);
+      const lastClaim = retentionData.lastDailyClaim || "";
+      const isClaimedToday = lastClaim === todayKey;
+
+      el('streakDays').textContent = streak;
+      el('claimBtn').disabled = isClaimedToday;
+      el('claimBtn').innerHTML = isClaimedToday 
+        ? `<span class="material-icons-round">check</span> ALINDI` 
+        : `<span class="material-icons-round">card_giftcard</span> GÜNLÜK ÖDÜLÜ AL`;
+
+      const rewardInfo = calcReward(streak + (isClaimedToday ? 0 : 1));
+      el('dailyRewardDesc').innerHTML = rewardInfo.desc;
+      
+      if(retentionData.premium) el('premiumBadge').style.display = 'inline-block';
+
+      // 2. XP & Level
+      const xp = Number(retentionData.xp || 0);
+      const lvl = calcLevel(xp);
+      el('currentLevel').textContent = lvl.level;
+      el('currentXp').textContent = lvl.current;
+      el('xpForNext').textContent = lvl.needed;
+      el('xpBarInner').style.width = `${(lvl.current / lvl.needed) * 100}%`;
+
+      // 3. Stats
+      el('statCoins').textContent = retentionData.coins || 0;
+      el('statMessages').textContent = retentionData.todayMessages || 0;
+
+      // 4. Missions
+      renderMissions();
+      
+      // 5. Events
+      renderHourlyEvent();
+      renderSurprise();
+    }
+
+    // --- LOGIC HELPERS ---
+    function calcLevel(xp) {
+      let level = 1, required = 0;
+      // Basit level formülü: her level 100 artan XP ister
+      while (xp >= required + 100 + (level-1)*20) {
+        required += 100 + (level-1)*20;
+        level++;
+      }
+      return { level, current: xp - required, needed: 100 + (level-1)*20 };
+    }
+
+    function calcReward(day) {
+      let coins = 10 + Math.min(90, Math.floor(day * 2));
+      let xp = 20 + Math.floor(day * 1.5);
+      let text = `+${coins} Coin, +${xp} XP`;
+      
+      if (day % 30 === 0) text += " <br>🎉 <b>BÜYÜK ÖDÜL!</b>";
+      else if (day % 7 === 0) text += " <br>🔥 <b>HAFTALIK BONUS!</b>";
+      
+      return { coins, xp, desc: text };
+    }
+
+    // --- ACTIONS ---
+    el('claimBtn').onclick = async () => {
+      const today = new Date().toISOString().slice(0,10);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+      
+      let streak = retentionData.streak || 0;
+      const last = retentionData.lastDailyClaim || "";
+      
+      if(last === today) return;
+
+      if(last === yesterday) streak++;
+      else streak = 1; // Reset
+
+      const r = calcReward(streak);
+      
+      await userDocRef.update({
+        lastDailyClaim: today,
+        streak: streak,
+        coins: firebase.firestore.FieldValue.increment(r.coins),
+        xp: firebase.firestore.FieldValue.increment(r.xp)
+      });
+      
+      showToast(`Ödül Alındı: +${r.coins} Coin!`);
+      loadUserData();
+    };
+
+    // --- MISSIONS ---
+    const allMissions = [
+      {id:"m1", desc:"💬 10 Mesaj Gönder", goal:10, reward:20},
+      {id:"m2", desc:"🎮 1 Oyun Oyna", goal:1, reward:15},
+      {id:"m3", desc:"👥 Arkadaş Ekle", goal:1, reward:10}
+    ];
+
+    function renderMissions() {
+      const list = el('missionsList');
+      list.innerHTML = '';
+      
+      allMissions.forEach(m => {
+        const userMissions = retentionData.missions || {};
+        const currentVal = (userMissions[m.id] && userMissions[m.id].value) || 0;
+        const isClaimed = (userMissions[m.id] && userMissions[m.id].claimed);
+        const isDone = currentVal >= m.goal;
+
+        const div = document.createElement('div');
+        div.className = `mission-item ${isClaimed ? 'completed' : ''}`;
+        
+        let btnHtml = '';
+        if(isClaimed) {
+          btnHtml = `<span style="color:var(--success); font-size:0.8rem; font-weight:700;">TAMAMLANDI</span>`;
+        } else if(isDone) {
+          btnHtml = `<button class="btn btn-claim btn-mini" onclick="claimMission('${m.id}')">Al: ${m.reward} XP</button>`;
+        } else {
+          btnHtml = `<span class="mission-badge">${currentVal}/${m.goal}</span>`;
+        }
+
+        div.innerHTML = `
+          <div class="mission-desc">
+            ${m.desc}
+          </div>
+          ${btnHtml}
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    window.claimMission = async (mid) => {
+      const m = allMissions.find(x => x.id === mid);
+      if(!m) return;
+      
+      // Update logic using dot notation for nested fields
+      let update = {};
+      update[`missions.${mid}.claimed`] = true;
+      update['coins'] = firebase.firestore.FieldValue.increment(m.reward);
+      update['xp'] = firebase.firestore.FieldValue.increment(m.reward);
+      
+      await userDocRef.update(update);
+      showToast(`Görev tamamlandı! +${m.reward} XP`);
+      loadUserData();
+    };
+
+    // --- EVENTS ---
+    function renderHourlyEvent() {
+      const box = el('hourlyEventBox');
+      const h = new Date().getHours();
+      // Örnek: Çift saatlerde event
+      if (h % 2 === 0) {
+        box.style.display = 'block';
+        box.innerHTML = `
+          <div style="display:flex; align-items:center; gap:10px;">
+             <span class="material-icons-round event-icon">alarm_on</span>
+             <div>
+               <div style="font-weight:700; color:#ec4899;">SAATLİK ETKİNLİK AKTİF</div>
+               <div style="font-size:0.85rem;">Şu an chatte %20 daha fazla XP kazanıyorsun!</div>
+             </div>
+          </div>
+        `;
+      } else {
+        box.style.display = 'none';
+      }
+    }
+
+    function renderSurprise() {
+      const box = el('randomSurpriseBox');
+      const today = new Date().toISOString().slice(0,10);
+      
+      // Eğer bugün almadıysa ve şanslıysa (%30 demo için arttırıldı)
+      if(retentionData.lastSurpriseClaim !== today && Math.random() < 0.3) {
+        box.style.display = 'block';
+        box.innerHTML = `
+          <div style="text-align:center;">
+             <div style="font-weight:700; color:#10b981; margin-bottom:8px;">🎁 SÜRPRİZ SANDIK BULUNDU!</div>
+             <button class="btn btn-primary btn-mini" style="margin:0 auto;" id="btnOpenSurprise">Açmak için tıkla</button>
+          </div>
+        `;
+        el('btnOpenSurprise').onclick = async () => {
+          const prize = 50;
+          await userDocRef.update({
+            coins: firebase.firestore.FieldValue.increment(prize),
+            lastSurpriseClaim: today
+          });
+          box.innerHTML = `<div style="text-align:center; color:#10b981; font-weight:700;">Tebrikler! +${prize} Coin Kazandın!</div>`;
+          loadUserData();
+        };
+      }
+    }
+
+  </script>
+</body>
+</html>
