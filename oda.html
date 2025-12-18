@@ -427,520 +427,465 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <script>
-    // --- YAPILANDIRMA ---
-    const firebaseConfig = {
-      apiKey: "AIzaSyBlirRiiNPpdqmTAmq6DsSq8mCUlgBHgVc",
-      authDomain: "lilemir-new.firebaseapp.com",
-      projectId: "lilemir-new",
-      storageBucket: "lilemir-new.firebasestorage.app",
-      messagingSenderId: "339863121380",
-      appId: "1:339863121380:web:123195552e821b085e6bf1"
-    };
+  // --- CONFIG ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyBlirRiiNPpdqmTAmq6DsSq8mCUlgBHgVc",
+    authDomain: "lilemir-new.firebaseapp.com",
+    projectId: "lilemir-new",
+    storageBucket: "lilemir-new.firebasestorage.app",
+    messagingSenderId: "339863121380",
+    appId: "1:339863121380:web:123195552e821b085e6bf1"
+  };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+  // init
+  if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-    // --- DOM ELEMENTLERİ ---
-    const el = id => document.getElementById(id);
-    const authModal = el('authModal');
-    const adminModal = el('adminModal');
-    const loginBtn = el('loginBtn');
-    const authError = el('authError');
-    const adminError = el('adminError');
-    const chatInput = el('chatInput');
-    const sendBtn = el('sendBtn');
-    const chatMessages = el('chatMessages');
-    const roomTitle = el('roomTitle');
-    const roomMeta = el('roomMeta');
-    const leaveRoomBtn = el('leaveRoomBtn');
-    const gameContainer = el('gameContainer');
-    
-    // --- DURUM DEĞİŞKENLERİ ---
-    let currentUser = null;
-    let currentRoomId = null;
-    let currentRoomData = null;
-    let unsubMessages = null;
-    let unsubMembers = null;
-    let unsubGame = null;
+  // helper el()
+  const el = id => document.getElementById(id);
 
-    // --- YARDIMCI FONKSİYONLAR ---
-    const showToast = (msg, type='success') => {
-      const w = el('toastWrapper');
-      const t = document.createElement('div');
-      t.className = `toast ${type}`;
-      t.innerHTML = `<span class="material-icons-round">${type==='success'?'check_circle':'error'}</span> ${msg}`;
-      w.appendChild(t);
-      requestAnimationFrame(() => t.classList.add('show'));
-      setTimeout(() => { t.classList.remove('show'); setTimeout(()=>t.remove(), 300); }, 3000);
-    };
+  // elements used below (already declared earlier in file)
+  const authModal = el('authModal');
+  const adminModal = el('adminModal');
+  const loginBtn = el('loginBtn');
+  const authError = el('authError');
+  const adminError = el('adminError');
+  const chatInput = el('chatInput');
+  const sendBtn = el('sendBtn');
+  const chatMessages = el('chatMessages');
+  const roomTitle = el('roomTitle');
+  const roomMeta = el('roomMeta');
+  const leaveRoomBtn = el('leaveRoomBtn');
+  const gameContainer = el('gameContainer');
+  const debugBox = el('debugBox');
 
-    const escapeHtml = (unsafe) => {
-      return (unsafe || "").replace(/[&<"']/g, function(m) {
-        switch (m) {
-          case '&': return '&amp;';
-          case '<': return '&lt;';
-          case '>': return '&gt;';
-          case '"': return '&quot;';
-          default: return '&#039;';
-        }
-      });
-    };
+  // state
+  let currentUser = null; // { uid, username, displayName, ... } either custom or firebase user + doc fields
+  let currentRoomId = null;
+  let currentRoomData = null;
+  let unsubMessages = null;
+  let unsubGame = null;
+  let unsubRoomDoc = null;
 
-    // --- AUTH MANTIĞI (Kullanıcı Adı <-> Email Dönüşümü) ---
-    // Firebase Auth sadece Email destekler, bu yüzden kullanıcı adını sahte bir emaile çeviriyoruz.
-    const createFakeEmail = (username) => `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@lilemir.local`;
+  // SHA256 helper
+  async function sha256Hex(str){
+    const enc = new TextEncoder();
+    const data = enc.encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
 
-    const handleLogin = async () => {
-      const username = el('loginUsername').value.trim();
-      const password = el('loginPassword').value;
-      
-      if(username.length < 3) return authError.textContent = "Kullanıcı adı en az 3 karakter olmalı.";
-      if(password.length < 6) return authError.textContent = "Şifre en az 6 karakter olmalı.";
+  // utilities
+  const showToast = (msg, type='success') => {
+    const w = el('toastWrapper');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span class="material-icons-round">${type==='success'?'check_circle':'error'}</span> ${msg}`;
+    w.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 3000);
+  };
+  const escapeHtml = s => (s||'').replace(/[&<"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]);
 
-      authError.textContent = "İşleniyor...";
-      loginBtn.disabled = true;
+  // --- AUTH (username/password using users collection) ---
+  // returns userDocData on success
+  async function signInByUsername(username, password){
+    authError.textContent = '';
+    if(!username || !password) { authError.textContent = 'Kullanıcı adı ve şifre girin.'; return null; }
 
-      const fakeEmail = createFakeEmail(username);
-
-      try {
-        // Önce giriş yapmayı dene
-        await auth.signInWithEmailAndPassword(fakeEmail, password);
-        // Giriş başarılı ise state listener yakalar
-      } catch (error) {
-        if (error.code === 'auth/user-not-found') {
-          // Kullanıcı yoksa, OTOMATİK KAYIT yap
-          try {
-            const userCred = await auth.createUserWithEmailAndPassword(fakeEmail, password);
-            // Firestore'a profil kaydet
-            await db.collection('users').doc(userCred.user.uid).set({
-              uid: userCred.user.uid,
-              username: username,
-              displayName: username,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-              balance: 0,
-              admin: false
-            });
-            showToast('Hesap oluşturuldu ve giriş yapıldı.');
-          } catch (createErr) {
-            console.error(createErr);
-            authError.textContent = "Kayıt oluşturulamadı: " + createErr.message;
-            loginBtn.disabled = false;
-          }
-        } else if (error.code === 'auth/wrong-password') {
-          authError.textContent = "Hatalı şifre.";
-          loginBtn.disabled = false;
-        } else {
-          authError.textContent = error.message;
-          loginBtn.disabled = false;
-        }
+    try{
+      // try find user doc by common fields
+      const candidateFields = ['username','userName','user','displayName','email'];
+      let doc = null;
+      for(const f of candidateFields){
+        try{
+          const q = await db.collection('users').where(f,'==',username).limit(1).get();
+          if(!q.empty){ doc = q.docs[0]; break; }
+        }catch(e){ /* ignore */ }
       }
-    };
-
-    loginBtn.onclick = handleLogin;
-    
-    // Enter tuşu ile giriş
-    el('loginPassword').addEventListener('keyup', (e) => { if(e.key === 'Enter') handleLogin(); });
-
-    // Admin Auth
-    el('toggleAdminAuth').onclick = () => { authModal.classList.remove('active'); adminModal.classList.add('active'); };
-    el('toggleUserAuth').onclick = () => { adminModal.classList.remove('active'); authModal.classList.add('active'); };
-    
-    el('adminLoginBtn').onclick = async () => {
-      const email = el('adminEmail').value;
-      const pass = el('adminPassword').value;
-      try {
-        await auth.signInWithEmailAndPassword(email, pass);
-        adminModal.classList.remove('active');
-      } catch(e) { el('adminError').textContent = e.message; }
-    };
-
-    el('logoutBtn').onclick = () => auth.signOut();
-
-    // --- AUTH STATE LISTENER ---
-    auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        authModal.classList.remove('active');
-        adminModal.classList.remove('active');
-        
-        // Kullanıcı verisini çek
-        let userData = {};
-        try {
-          const doc = await db.collection('users').doc(user.uid).get();
-          if (doc.exists) userData = doc.data();
-        } catch(e) { console.log(e); }
-
-        currentUser = { ...user, ...userData };
-        el('meName').textContent = currentUser.displayName || currentUser.username || "Kullanıcı";
-        el('userBadge').textContent = currentUser.admin ? "YÖNETİCİ" : "Üye";
-        
-        loadRooms();
-      } else {
-        currentUser = null;
-        authModal.classList.add('active');
-        leaveRoom();
+      // fallback doc id
+      if(!doc){
+        const byId = await db.collection('users').doc(username).get();
+        if(byId.exists) doc = byId;
       }
-    });
-
-    // --- ODA SİSTEMİ ---
-    const loadRooms = async () => {
-      const list = el('roomsList');
-      db.collection('rooms').orderBy('createdAt', 'desc').onSnapshot(snap => {
-        list.innerHTML = '';
-        snap.forEach(doc => {
-          const r = doc.data();
-          const div = document.createElement('div');
-          div.className = 'room-item';
-          div.innerHTML = `
-            <div class="room-info">
-              <h4>${escapeHtml(r.name)}</h4>
-              <p>${escapeHtml(r.type)}</p>
-            </div>
-            <span class="material-icons-round" style="font-size:18px; color:var(--text-muted)">chevron_right</span>
-          `;
-          div.onclick = () => joinRoom(r.id);
-          list.appendChild(div);
-        });
-      });
-    };
-
-    el('createRoomBtn').onclick = async () => {
-      const name = el('newRoomName').value.trim();
-      const type = el('newRoomType').value;
-      if (!name) return showToast('Oda adı girin', 'error');
-      
-      try {
-        const roomRef = db.collection('rooms').doc();
-        await roomRef.set({
-          id: roomRef.id,
-          name, type,
-          owner: currentUser.uid,
-          moderators: [currentUser.uid],
+      // if not found -> create new user doc (auto-register)
+      if(!doc){
+        // create doc
+        const newRef = db.collection('users').doc();
+        const hashed = await sha256Hex(password);
+        const payload = {
+          username,
+          displayName: username,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          banned: []
-        });
-        el('newRoomName').value = '';
-        showToast('Oda oluşturuldu');
-      } catch(e) { showToast(e.message, 'error'); }
-    };
+          balance: 0,
+          hashedPassword: hashed
+        };
+        await newRef.set(payload);
+        const snap = await newRef.get();
+        doc = snap;
+        console.log('Auto-created user doc:', newRef.id);
+      }
 
-    // --- ODA İÇİ & CHAT ---
-    const joinRoom = async (roomId) => {
-      leaveRoom(); // Önceki odadan çık
-      currentRoomId = roomId;
-      
-      // UI Güncelle
-      gameContainer.style.display = "block";
-      leaveRoomBtn.style.display = "block";
-      
-      // Mobilde sidebarı kapat
-      el('sidebar').classList.remove('open');
-
-      // Oda Bilgisi
-      db.collection('rooms').doc(roomId).onSnapshot(doc => {
-        if (!doc.exists) return showToast('Oda silinmiş', 'error');
-        currentRoomData = doc.data();
-        roomTitle.textContent = currentRoomData.name;
-        roomMeta.textContent = currentRoomData.type;
-        
-        // Ban kontrolü
-        const banned = currentRoomData.banned || [];
-        if (banned.includes(currentUser.uid)) {
-           chatInput.disabled = true;
-           chatInput.placeholder = "Bu odadan banlandınız.";
-           sendBtn.disabled = true;
-           el('tkgmChoices').style.display = 'none';
-        } else {
-           chatInput.disabled = false;
-           chatInput.placeholder = "Mesaj yaz...";
-           sendBtn.disabled = false;
-           el('tkgmChoices').style.display = 'flex';
+      const data = doc.data() || {};
+      // find stored password field
+      const passCandidates = ['hashedPassword','passwordHash','passHash','pwdHash','password','pwHash','pass'];
+      let stored = null, usedField = null;
+      for(const pf of passCandidates){
+        if(data[pf] !== undefined && data[pf] !== null){
+          stored = String(data[pf]).trim();
+          usedField = pf;
+          break;
         }
-        
-        renderMembers();
-      });
+      }
+      if(!stored){
+        // no stored, treat as open account -> login success
+        currentUser = { uid: doc.id, ...data };
+        return { uid: doc.id, ...data };
+      }
 
-      // Mesajları Dinle
-      unsubMessages = db.collection('rooms').doc(roomId).collection('messages')
-        .orderBy('timestamp', 'asc')
-        .onSnapshot(snap => {
-          chatMessages.innerHTML = '';
-          snap.forEach(doc => {
-            const m = doc.data();
-            renderMessage(m);
-          });
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
+      // detect SHA256 hex
+      const storedLower = stored.toLowerCase();
+      if(/^[a-f0-9]{64}$/.test(storedLower)){
+        const providedHash = await sha256Hex(password);
+        if(providedHash !== storedLower){
+          authError.textContent = 'Şifre yanlış.';
+          return null;
+        }
+        currentUser = { uid: doc.id, ...data };
+        return { uid: doc.id, ...data };
+      } else {
+        // fallback plaintext compare
+        if(password !== stored){
+          authError.textContent = 'Şifre yanlış.';
+          return null;
+        }
+        currentUser = { uid: doc.id, ...data };
+        return { uid: doc.id, ...data };
+      }
+    }catch(err){
+      console.error('signInByUsername error', err);
+      authError.textContent = 'Giriş sırasında hata.';
+      return null;
+    }
+  }
 
-      // Oyun Başlat
-      initGame();
-    };
+  // wrapper invoked by UI
+  async function handleLogin(){
+    authError.textContent = '';
+    loginBtn.disabled = true;
+    const username = el('loginUsername').value.trim();
+    const password = el('loginPassword').value;
+    const result = await signInByUsername(username, password);
+    loginBtn.disabled = false;
+    if(result){
+      // hide auth modal and set UI
+      authModal.classList.remove('active');
+      currentUser = result;
+      el('meName').textContent = result.displayName || result.username || 'Kullanıcı';
+      el('userBadge').textContent = result.admin ? 'YÖNETİCİ' : 'Üye';
+      // enable chat input
+      chatInput.disabled = false;
+      sendBtn.disabled = false;
+      loadRooms();
+    }
+  }
 
-    const renderMessage = (m) => {
-      const isMe = m.fromUid === currentUser.uid;
-      const div = document.createElement('div');
-      div.className = `msg ${isMe ? 'me' : ''}`;
-      
-      // Tarih formatı
-      const date = m.timestamp ? new Date(m.timestamp.toDate()) : new Date();
-      const time = date.getHours().toString().padStart(2,'0') + ':' + date.getMinutes().toString().padStart(2,'0');
+  // attach login handler
+  if(loginBtn){
+    loginBtn.onclick = handleLogin;
+    el('loginPassword').addEventListener('keyup', (e)=>{ if(e.key === 'Enter') handleLogin(); });
+  }
 
-      div.innerHTML = `
-        <div class="meta">
-          <strong>${escapeHtml(m.displayName)}</strong>
-          <span>${time}</span>
-        </div>
-        ${escapeHtml(m.text)}
-      `;
-      chatMessages.appendChild(div);
-    };
+  // Admin modal toggles kept as-is earlier
+  el('toggleAdminAuth').onclick = () => { authModal.classList.remove('active'); adminModal.classList.add('active'); };
+  el('toggleUserAuth').onclick = () => { adminModal.classList.remove('active'); authModal.classList.add('active'); };
 
-    const leaveRoom = () => {
-      if (unsubMessages) unsubMessages();
-      if (unsubGame) unsubGame();
-      currentRoomId = null;
-      currentRoomData = null;
-      roomTitle.textContent = "Oda Seçimi";
-      roomMeta.textContent = "Sohbete başlamak için bir odaya katılın";
-      chatMessages.innerHTML = `<div style="text-align:center; margin-top:50px; color:var(--text-muted);"><span class="material-icons-round" style="font-size:48px; opacity:0.5;">forum</span><p>Oda seçin</p></div>`;
-      el('membersList').innerHTML = '';
-      el('membersCount').textContent = '0';
-      gameContainer.style.display = "none";
-      leaveRoomBtn.style.display = "none";
-      chatInput.disabled = true;
-      sendBtn.disabled = true;
-    };
+  // admin login using firebase (unchanged)
+  el('adminLoginBtn').onclick = async () => {
+    const email = el('adminEmail').value;
+    const pass = el('adminPassword').value;
+    try {
+      await auth.signInWithEmailAndPassword(email, pass);
+      adminModal.classList.remove('active');
+      authModal.classList.remove('active');
+    } catch(e) { el('adminError').textContent = e.message; }
+  };
 
-    el('leaveRoomBtn').onclick = leaveRoom;
+  el('logoutBtn').onclick = () => {
+    // clear custom session
+    currentUser = null;
+    auth.signOut().catch(()=>{});
+    authModal.classList.add('active');
+    leaveRoom();
+  };
 
-    // --- MESAJ GÖNDERME ---
-    const sendMessage = async () => {
-      const text = chatInput.value.trim();
-      if (!text || !currentRoomId) return;
-      
-      try {
-        await db.collection('rooms').doc(currentRoomId).collection('messages').add({
-          text,
-          fromUid: currentUser.uid,
-          displayName: currentUser.displayName || currentUser.username,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        chatInput.value = '';
-      } catch(e) { console.error(e); }
-    };
-    
-    sendBtn.onclick = sendMessage;
-    chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-    });
+  // Auth state: if firebase user signs in (admin path), merge users doc if exists
+  auth.onAuthStateChanged(async (fbUser) => {
+    if(fbUser){
+      // try fetch profile doc
+      let data = {};
+      try{
+        const doc = await db.collection('users').doc(fbUser.uid).get();
+        if(doc.exists) data = doc.data();
+      }catch(e){}
+      currentUser = { uid: fbUser.uid, displayName: fbUser.displayName||data.displayName||data.username, admin: data.admin || false, ...data };
+      authModal.classList.remove('active');
+      adminModal.classList.remove('active');
+      el('meName').textContent = currentUser.displayName || currentUser.username || 'Kullanıcı';
+      el('userBadge').textContent = currentUser.admin ? 'YÖNETİCİ' : 'Üye';
+      chatInput.disabled = false;
+      sendBtn.disabled = false;
+      loadRooms();
+    }
+  });
 
-    // --- ÜYELER VE MODERASYON ---
-    const renderMembers = () => {
-      const list = el('membersList');
+  // --- ROOMS & CHAT (mostly re-used) ---
+  async function loadRooms(){
+    const list = el('roomsList');
+    db.collection('rooms').orderBy('createdAt','desc').onSnapshot(snap=>{
       list.innerHTML = '';
-      if (!currentRoomData) return;
-      
-      const mods = currentRoomData.moderators || [];
-      const owner = currentRoomData.owner;
-      
-      // Şimdilik sadece moderatörleri listeliyoruz (demo amaçlı)
-      // Gerçek zamanlı presence için Realtime Database gerekir, Firestore ile sadece yetkilileri gösterebiliriz.
-      // Ancak görsel olarak şu anki kullanıcıyı ve yetkilileri ekleyelim.
-      
-      const membersToShow = [...new Set([owner, ...mods, currentUser.uid])]; // Unique
-      el('membersCount').textContent = membersToShow.length;
-
-      membersToShow.forEach(uid => {
-        const isOwner = uid === owner;
-        const isMod = mods.includes(uid);
-        const isMe = uid === currentUser.uid;
-        
-        let roleBadge = '';
-        if(isOwner) roleBadge = '<span class="badge-role owner">Sahip</span>';
-        else if(isMod) roleBadge = '<span class="badge-role mod">Mod</span>';
-
+      snap.forEach(doc=>{
+        const r = doc.data();
         const div = document.createElement('div');
-        div.className = 'member-item';
+        div.className = 'room-item';
         div.innerHTML = `
-          <div>
-            <span style="font-weight:${isMe?700:400}">${isMe ? 'Sen' : (uid.substring(0,6)+'...')}</span>
-            ${roleBadge}
+          <div class="room-info">
+            <h4>${escapeHtml(r.name)}</h4>
+            <p>${escapeHtml(r.type)}</p>
           </div>
+          <span class="material-icons-round" style="font-size:18px; color:var(--text-muted)">chevron_right</span>
         `;
-        
-        // Admin Actions
-        if (!isMe && (currentUser.uid === owner || (mods.includes(currentUser.uid) && !isOwner))) {
-           const actions = document.createElement('div');
-           
-           // Ban Button
-           const banBtn = document.createElement('button');
-           banBtn.className = 'btn ghost'; 
-           banBtn.style.padding = '4px'; banBtn.style.minWidth='auto';
-           banBtn.innerHTML = '<span class="material-icons-round" style="font-size:16px; color:#ef4444">block</span>';
-           banBtn.onclick = () => banUser(uid);
-           actions.appendChild(banBtn);
-
-           div.appendChild(actions);
-        }
-        
+        div.onclick = ()=> joinRoom(doc.id);
         list.appendChild(div);
       });
-    };
+    });
+  }
 
-    const banUser = async (targetUid) => {
-       if(!confirm('Bu kullanıcıyı banlamak istiyor musun?')) return;
-       const banned = currentRoomData.banned || [];
-       await db.collection('rooms').doc(currentRoomId).update({
-         banned: [...banned, targetUid]
-       });
-       showToast('Kullanıcı banlandı');
-    };
-
-    // --- TAŞ KAĞIT MAKAS (Geliştirilmiş) ---
-    const initGame = () => {
-      const status = el('tkgmStatus');
-      const gameRef = db.collection('rooms').doc(currentRoomId).collection('rockpaperscissors');
-      
-      // Button Events
-      const choices = el('tkgmChoices').querySelectorAll('button');
-      choices.forEach(btn => {
-        btn.onclick = () => sendGameMove(btn.dataset.choice);
+  el('createRoomBtn').onclick = async ()=>{
+    if(!currentUser) return showToast('Önce giriş yapın','error');
+    const name = el('newRoomName').value.trim(); const type=el('newRoomType').value;
+    if(!name) return showToast('Oda adı girin','error');
+    try{
+      const roomRef = db.collection('rooms').doc();
+      await roomRef.set({
+        id: roomRef.id,
+        name, type,
+        owner: currentUser.uid,
+        moderators: [currentUser.uid],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        banned: []
       });
+      el('newRoomName').value='';
+      showToast('Oda oluşturuldu');
+    }catch(e){ console.error(e); showToast('Oda oluşturulamadı','error'); }
+  };
 
-      unsubGame = gameRef.orderBy('createdAt', 'desc').limit(1).onSnapshot(snap => {
-        if(snap.empty) {
-          status.textContent = "Oyun hazır. Hamle yapın!";
-          enableGameBtns(true);
-          return;
-        }
-        
-        const g = snap.docs[0].data();
-        const docId = snap.docs[0].id;
+  // joinRoom updated to setup messages and game listener
+  async function joinRoom(roomId){
+    // leave previous
+    leaveRoom();
+    currentRoomId = roomId;
 
-        if (g.finished) {
-          const res = g.result || {};
-          let msg = "";
-          if (res.outcome === 'draw') msg = "Berabere!";
-          else if (res.winnerUid === currentUser.uid) msg = "KAZANDIN! 🎉";
-          else msg = "Kaybettin 😔";
-          
-          status.innerHTML = `${msg} <br><span style="font-size:0.8em; color:var(--text-muted)">Yeni oyun başlıyor...</span>`;
-          enableGameBtns(false);
-          // 3 saniye sonra yeni oyun için butonları aç
-          setTimeout(() => { 
-             status.textContent = "Yeni Tur: Hamle yap!"; 
-             enableGameBtns(true); 
-          }, 3000);
-        } else {
-          // Oyun devam ediyor
-          const p1 = g.player1;
-          const p2 = g.player2;
-          
-          let myMove = null;
-          if (p1 && p1.uid === currentUser.uid) myMove = p1.move;
-          if (p2 && p2.uid === currentUser.uid) myMove = p2.move;
-
-          if (myMove) {
-            status.textContent = `Hamle yapıldı (${moveEmoji(myMove)}). Rakip bekleniyor...`;
-            enableGameBtns(false);
-          } else {
-            status.textContent = "Rakip hamle yaptı! Sıra sende.";
-            enableGameBtns(true);
-          }
-          
-          // Eğer her iki taraf da oynadıysa ve client tarafındaysak (finalize için backend/functions daha iyidir ama burada client trigger kullanıyoruz)
-          // Not: Orijinal koddaki transaction yapısı karmaşık olduğu için burada UI odaklı basitleştirdik, ancak orijinal koddaki "backend logic" bu UI ile çalışmaya devam edecektir.
-        }
-      });
-    };
-
-    const sendGameMove = async (move) => {
-      // Orijinal koddaki işlem mantığına benzer, sadeleştirilmiş hamle gönderimi
-      // Buradaki mantık: Son oyunu bul -> bitmişse yeni yarat -> bitmemişse katıl
-      const gameRef = db.collection('rooms').doc(currentRoomId).collection('rockpaperscissors');
-      const snap = await gameRef.orderBy('createdAt', 'desc').limit(1).get();
-      
-      const playerObj = { 
-        uid: currentUser.uid, 
-        displayName: currentUser.displayName || currentUser.username, 
-        move: move 
-      };
-
-      let shouldCreateNew = true;
-      let docToUpdate = null;
-
-      if (!snap.empty) {
-        const doc = snap.docs[0];
-        const data = doc.data();
-        
-        if (!data.finished) {
-           // Mevcut oyuna katılabilir miyiz?
-           if (!data.player2 && data.player1.uid !== currentUser.uid) {
-             shouldCreateNew = false;
-             // Oyunu bitir
-             const p1 = data.player1;
-             const p2 = playerObj;
-             const result = calculateWinner(p1, p2);
-             
-             await doc.ref.update({
-               player2: p2,
-               finished: true,
-               result: result
-             });
-             // Sistem mesajı gönder
-             sendSystemMessage(`Oyun Sonucu: ${p1.displayName} (${moveEmoji(p1.move)}) vs ${p2.displayName} (${moveEmoji(p2.move)}) -> ${result.outcome === 'draw' ? 'Berabere' : 'Kazanan: ' + (result.winnerUid === p1.uid ? p1.displayName : p2.displayName)}`);
-           }
-        }
+    // subscribe room doc
+    const roomDocRef = db.collection('rooms').doc(roomId);
+    unsubRoomDoc = roomDocRef.onSnapshot(doc=>{
+      if(!doc.exists) { showToast('Oda silinmiş','error'); leaveRoom(); return; }
+      currentRoomData = doc.data();
+      roomTitle.textContent = currentRoomData.name;
+      roomMeta.textContent = currentRoomData.type;
+      // ban check
+      const banned = currentRoomData.banned || [];
+      if(banned.includes(currentUser.uid)){
+        chatInput.disabled=true; sendBtn.disabled=true; el('tkgmChoices').style.display='none';
+        chatInput.placeholder='Bu odadan banlandınız.';
+      } else {
+        chatInput.disabled=false; sendBtn.disabled=false; el('tkgmChoices').style.display='flex';
+        chatInput.placeholder='Mesaj yaz...';
       }
-
-      if (shouldCreateNew) {
-        await gameRef.add({
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          player1: playerObj,
-          finished: false
-        });
-      }
-    };
-
-    const calculateWinner = (p1, p2) => {
-      if (p1.move === p2.move) return { outcome: 'draw' };
-      const rules = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
-      if (rules[p1.move] === p2.move) return { outcome: 'win', winnerUid: p1.uid, loserUid: p2.uid };
-      return { outcome: 'win', winnerUid: p2.uid, loserUid: p1.uid };
-    };
-
-    const moveEmoji = (m) => {
-      if(m==='rock') return '🪨';
-      if(m==='paper') return '📄';
-      if(m==='scissors') return '✂️';
-      return '?';
-    };
-
-    const enableGameBtns = (state) => {
-      const btns = el('tkgmChoices').querySelectorAll('button');
-      btns.forEach(b => b.disabled = !state);
-    };
-    
-    const sendSystemMessage = (text) => {
-      db.collection('rooms').doc(currentRoomId).collection('messages').add({
-        text, fromUid: 'system', displayName: 'Sistem',
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    };
-
-    // Mobile Menu
-    el('mobileMenuBtn').onclick = () => {
-      el('sidebar').classList.toggle('open');
-    };
-    // Dışarı tıklayınca sidebarı kapat
-    document.addEventListener('click', (e) => {
-      const sidebar = el('sidebar');
-      const btn = el('mobileMenuBtn');
-      if (window.innerWidth <= 768 && sidebar.classList.contains('open') && !sidebar.contains(e.target) && !btn.contains(e.target)) {
-        sidebar.classList.remove('open');
-      }
+      renderMembers();
     });
 
-  </script>
+    // messages
+    unsubMessages = roomDocRef.collection('messages').orderBy('timestamp','asc').onSnapshot(snap=>{
+      chatMessages.innerHTML = '';
+      snap.forEach(d=>{
+        const m = d.data();
+        renderMessage(m);
+      });
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+
+    // game doc for RPS
+    initRpsGame(roomId);
+
+    gameContainer.style.display = 'block';
+    leaveRoomBtn.style.display = 'block';
+    el('sidebar').classList.remove('open');
+  }
+
+  function leaveRoom(){
+    if(unsubMessages){ unsubMessages(); unsubMessages = null; }
+    if(unsubGame){ unsubGame(); unsubGame = null; }
+    if(unsubRoomDoc){ unsubRoomDoc(); unsubRoomDoc = null; }
+    currentRoomId = null; currentRoomData = null;
+    roomTitle.textContent='Oda Seçimi'; roomMeta.textContent='Sohbete başlamak için bir odaya katılın';
+    chatMessages.innerHTML = `<div style="text-align:center; margin-top:50px; color:var(--text-muted);"><span class="material-icons-round" style="font-size:48px; opacity:0.5;">forum</span><p>Oda seçin</p></div>`;
+    el('membersList').innerHTML=''; el('membersCount').textContent='0';
+    gameContainer.style.display='none'; leaveRoomBtn.style.display='none';
+    chatInput.disabled = true; sendBtn.disabled = true;
+  }
+
+  function renderMessage(m){
+    const isMe = m.fromUid === currentUser.uid;
+    const div = document.createElement('div');
+    div.className = `msg ${isMe?'me':''}`;
+    const date = m.timestamp ? new Date(m.timestamp.toDate()) : new Date();
+    const time = date.getHours().toString().padStart(2,'0') + ':' + date.getMinutes().toString().padStart(2,'0');
+    div.innerHTML = `<div class="meta"><strong>${escapeHtml(m.displayName)}</strong><span>${time}</span></div>${escapeHtml(m.text)}`;
+    chatMessages.appendChild(div);
+  }
+
+  // send message
+  async function sendMessage(){
+    const text = chatInput.value.trim();
+    if(!text || !currentRoomId) return;
+    try{
+      await db.collection('rooms').doc(currentRoomId).collection('messages').add({
+        text, fromUid: currentUser.uid, displayName: currentUser.displayName || currentUser.username, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      chatInput.value = '';
+    }catch(e){ console.error(e); showToast('Mesaj gönderilemedi','error'); }
+  }
+  sendBtn.onclick = sendMessage;
+  chatInput.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+
+  // members UI
+  function renderMembers(){
+    const list = el('membersList'); list.innerHTML='';
+    if(!currentRoomData) return;
+    const mods = currentRoomData.moderators || [];
+    const owner = currentRoomData.owner;
+    const arr = [...new Set([owner, ...mods, currentUser.uid])];
+    el('membersCount').textContent = arr.length;
+    arr.forEach(uid=>{
+      const isOwner = uid===owner;
+      const isMod = mods.includes(uid);
+      const isMe = uid===currentUser.uid;
+      let roleBadge='';
+      if(isOwner) roleBadge = '<span class="badge-role owner">Sahip</span>';
+      else if(isMod) roleBadge = '<span class="badge-role mod">Mod</span>';
+      const div = document.createElement('div');
+      div.className='member-item';
+      div.innerHTML = `<div><span style="font-weight:${isMe?700:400}">${isMe?'Sen':(uid.substring(0,6)+'...')}</span> ${roleBadge}</div>`;
+      list.appendChild(div);
+    });
+  }
+
+  // --- Rock Paper Scissors (RPS) Implementation ---
+  // game doc path: rooms/{roomId}/game/rps  (single doc)
+  function initRpsGame(roomId){
+    const docRef = db.collection('rooms').doc(roomId).collection('game').doc('rps');
+
+    // subscribe
+    unsubGame = docRef.onSnapshot(async snap=>{
+      const data = snap.exists ? snap.data() : {};
+      const choices = data.choices || {};
+      const resolved = data.resolved || false;
+
+      // update UI (highlight user's choice if present)
+      // show status
+      const statusEl = el('tkgmStatus');
+      const players = Object.keys(choices);
+      if(players.length === 0){
+        statusEl.textContent = 'Taş-Kağıt-Makas: Başlamak için hamle yap';
+      } else {
+        statusEl.textContent = `Seçildi: ${players.length} oyuncu`;
+      }
+
+      // If at least two different players have chosen and not yet resolved -> compute result
+      if(!resolved && players.length >= 2){
+        // pick first two players (order non-deterministic but fine)
+        const p1 = players[0], p2 = players[1];
+        const c1 = choices[p1], c2 = choices[p2];
+        const outcome = decideRps(c1, c2); // 1 => p1 wins, -1 => p2 wins, 0 => tie
+
+        let resultText = '';
+        if(outcome === 0){
+          resultText = `Berabere! ${c1} vs ${c2}`;
+        } else if(outcome === 1){
+          resultText = `${shortName(p1)} kazandı! ${c1} beats ${c2}`;
+        } else {
+          resultText = `${shortName(p2)} kazandı! ${c2} beats ${c1}`;
+        }
+
+        // write result as chat message
+        try{
+          await db.collection('rooms').doc(roomId).collection('messages').add({
+            text: `[RPS] ${resultText}`,
+            fromUid: 'system',
+            displayName: 'Oyun',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          // mark resolved to avoid duplicate handling
+          await docRef.set({ resolved: true, lastResult: { p1, p2, c1, c2, outcome }, lastUpdate: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          // after short delay, reset choices so new round can start
+          setTimeout(()=> {
+            docRef.set({ choices: {}, resolved: false, lastResult: firebase.firestore.FieldValue.delete() }, { merge: true }).catch(e=>console.warn('reset choices failed', e));
+          }, 3500);
+        }catch(e){ console.error('writing rps result failed', e); }
+      }
+    });
+    // attach UI click handlers for buttons
+    const buttons = document.querySelectorAll('#tkgmChoices .game-btn');
+    buttons.forEach(b=>{
+      b.onclick = async () => {
+        if(!currentRoomId || !currentUser) return showToast('Önce odaya katılın','error');
+        const choice = b.dataset.choice;
+        const uid = currentUser.uid;
+        try{
+          const ref = db.collection('rooms').doc(currentRoomId).collection('game').doc('rps');
+          // set choices.<uid> = choice
+          const updateObj = {};
+          updateObj['choices.'+uid] = choice;
+          await ref.set(updateObj, { merge: true });
+          // also add a small message announcing the selection (optional, not revealing)
+          await db.collection('rooms').doc(currentRoomId).collection('messages').add({
+            text: `[RPS] ${currentUser.displayName || currentUser.username} hamle yaptı.`,
+            fromUid: 'system',
+            displayName: 'Oyun',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }catch(e){ console.error('rps choose error', e); showToast('Hamle gönderilemedi','error'); }
+      };
+    });
+  }
+
+  function decideRps(a,b){
+    // a,b in ['rock','paper','scissors'] -> return 1 if a wins, -1 if b wins, 0 tie
+    if(a===b) return 0;
+    if(a==='rock' && b==='scissors') return 1;
+    if(a==='scissors' && b==='paper') return 1;
+    if(a==='paper' && b==='rock') return 1;
+    return -1;
+  }
+  function shortName(uid){ return (uid===currentUser.uid) ? 'Sen' : (uid.substring(0,8)); }
+
+  // init: UI state
+  signedOutInitialState();
+  function signedOutInitialState(){
+    authModal.classList.add('active');
+    chatInput.disabled = true;
+    sendBtn.disabled = true;
+  }
+
+  // quick: bind leaveRoom button
+  el('leaveRoomBtn').onclick = leaveRoom;
+
+  // debug: optional show last loaded doc
+  // (not used here)
+
+  // end script
+</script>
 </body>
 </html>
